@@ -1,0 +1,10 @@
+{
+    "name": "honeypot-watcher",
+    "version": "1.0.0",
+    "type": "module",
+    "dependencies": {
+      "ioredis": "^5.3.2",
+      "node-fetch": "^3.3.2"
+    }
+  }
+  
