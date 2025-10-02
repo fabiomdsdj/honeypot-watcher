@@ -35,3 +35,4 @@ redis.on('message', async (channel, message) => {
     console.error('Erro ao processar evento honeypot:', e);
   }
 });
+
