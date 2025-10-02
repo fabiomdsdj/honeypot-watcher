@@ -1,32 +1,37 @@
-// tools/honeypot-listener.js
-const Redis = require('ioredis');
-const fetch = require('node-fetch');
+// api/honeypot-listener.js
+import Redis from 'ioredis';
+import fetch from 'node-fetch';
 
 const redis = new Redis(process.env.REDIS_URL);
 const SLACK_HOOK = process.env.SLACK_HOOK;
 
-// Cria um canal de "honeypot-events"
-const CHANNEL = 'honeypot:events_channel';
-
-redis.subscribe(CHANNEL, (err, count) => {
-  if (err) console.error('Erro ao se inscrever no canal:', err);
-  else console.log(`Inscrito no canal ${CHANNEL}, total de canais: ${count}`);
-});
-
-redis.on('message', async (channel, message) => {
+export default async function handler(req, res) {
   try {
-    if (channel !== CHANNEL) return;
-    const event = JSON.parse(message);
-    console.log('Novo honeypot detectado:', event);
-
-    if (SLACK_HOOK) {
-      await fetch(SLACK_HOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `HONEYPOT: ${event.ip} ${event.path} ${event.ua}` })
-      });
+    // pega até 10 eventos pendentes
+    const items = await redis.lrange('honeypot:events', 0, 9);
+    if (!items || items.length === 0) {
+      return res.status(200).json({ msg: 'No events' });
     }
-  } catch (e) {
-    console.error('Erro ao processar evento honeypot:', e);
+
+    for (const item of items) {
+      const event = JSON.parse(item);
+      console.log('Honeypot event:', event);
+
+      if (SLACK_HOOK) {
+        await fetch(SLACK_HOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `HONEYPOT: ${event.ip} ${event.path} ${event.ua}` })
+        });
+      }
+    }
+
+    // limpa os eventos processados
+    await redis.ltrim('honeypot:events', items.length, -1);
+
+    res.status(200).json({ processed: items.length });
+  } catch (err) {
+    console.error('Erro honeypot listener:', err);
+    res.status(500).json({ error: 'Internal error' });
   }
-});
+}
